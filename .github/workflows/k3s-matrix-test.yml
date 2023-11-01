@@ -1,4 +1,4 @@
-name: K3s Matrix Testing
+name: K3s Matrix Testing 
 
 on: [push]
 
@@ -6,40 +6,43 @@ jobs:
 
   get-versions:
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      
+    
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+    - uses: actions/checkout@v2
 
-    - name: Get K3s Versions
-      id: get-k3s-versions
+    - id: get-k3s-versions
       run: |
         releases=$(curl -s https://api.github.com/repos/k3s-io/k3s/releases | jq -r '.[].tag_name' | head -n 5)
-        echo $releases | jq -R 'split("\n") | map(select(test("rc") | not))'
-        echo "matrix=$(echo $releases | jq -R 'split("\n") | map(select(test("rc") | not))')" >> $GITHUB_ENV
-
-    - name: Set Matrix
-      id: set-matrix  
-      run: |
-        matrix="${MATRIX//v/}"
-        matrix="${matrix//+k3s/}"
+        matrix=$(echo $releases | jq -R 'split("\n") | map(select(test("rc") | not))')
         echo "matrix=${matrix}" >> $GITHUB_ENV
+
+    - id: write-matrix
+      run: echo ${matrix} > matrix.json
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: matrix
+        path: matrix.json
 
   test:
 
     needs: get-versions
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix: ${{fromJson(needs.get-versions.outputs.matrix)}}
-
     steps:
     - uses: actions/checkout@v2
-      
+    
+    - uses: actions/download-artifact@v3
+      with:
+        name: matrix
+            
+    - id: read-matrix
+      run: |
+        matrix=$(cat matrix.json)
+        echo "matrix=${matrix}" >> $GITHUB_ENV
+
     - name: Test
-      env: 
+      env:
         k8s_version: ${{ matrix.k8s_version }}  
       run: |
         k3s_version="v$k8s_version+k3s1"
