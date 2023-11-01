@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-    
+      
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -18,15 +18,14 @@ jobs:
       run: |
         releases=$(curl -s https://api.github.com/repos/k3s-io/k3s/releases | jq -r '.[].tag_name' | head -n 5)
         echo $releases | jq -R 'split("\n") | map(select(test("rc") | not))'
-        echo "::set-output name=releases::$(echo $releases | jq -R 'split("\n") | map(select(test("rc") | not))')"
+        echo "matrix=$(echo $releases | jq -R 'split("\n") | map(select(test("rc") | not))')" >> $GITHUB_ENV
 
-    - name: Set Matrix  
-      id: set-matrix
+    - name: Set Matrix
+      id: set-matrix  
       run: |
-        releases="${{ steps.get-k3s-versions.outputs.releases }}"
-        k8s_versions="${releases//v/}"
-        k8s_versions="${k8s_versions//+k3s/}"
-        echo "::set-output name=matrix::$(echo $k8s_versions)"
+        matrix="${MATRIX//v/}"
+        matrix="${matrix//+k3s/}"
+        echo "matrix=${matrix}" >> $GITHUB_ENV
 
   test:
 
@@ -37,12 +36,13 @@ jobs:
       matrix: ${{fromJson(needs.get-versions.outputs.matrix)}}
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-
-    - name: Deploy Nginx
+    - uses: actions/checkout@v2
+      
+    - name: Test
+      env: 
+        k8s_version: ${{ matrix.k8s_version }}  
       run: |
-        k3s_version=v${{ matrix.k8s_version }}+k3s1
+        k3s_version="v$k8s_version+k3s1"
         curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=$k3s_version sh -
         kubectl create deploy nginx --image=nginx
         kubectl rollout status deploy nginx
